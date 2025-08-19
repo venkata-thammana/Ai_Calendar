@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import pytz
 from rapidfuzz import fuzz
 from typing import List, Dict
+from langchain.tools import tool 
 
 CALENDAR_ID='ae74fa4fda8818b1fac026895d5eb544540b0799567bd8e16ca771250f6bc1bf@group.calendar.google.com'
 TASKLIST_ID='MjFUS0VlSGtRRldRalhueg'
@@ -16,26 +17,32 @@ TASKLIST_ID='MjFUS0VlSGtRRldRalhueg'
 SCOPES = ["https://www.googleapis.com/auth/calendar",'https://www.googleapis.com/auth/tasks']
 
 def get_creds():
-  creds = None
-  # The file token.json stores the user's access and refresh tokens, and is
-  # created automatically when the authorization flow completes for the first
-  # time.
-  if os.path.exists("/Users/akshaythammana/Ai_Calendar/token.json"):
-    creds = Credentials.from_authorized_user_file("/Users/akshaythammana/Ai_Calendar/token.json", SCOPES)
-  # If there are no (valid) credentials available, let the user log in.
-  if not creds or not creds.valid:
-    if creds and creds.expired and creds.refresh_token:
-      creds.refresh(Request())
-    else:
-      flow = InstalledAppFlow.from_client_secrets_file(
-          "/Users/akshaythammana/Ai_Calendar/creds.json", SCOPES
-      )
-      creds = flow.run_local_server(port=0)
-    # Save the credentials for the next run
-    with open("/Users/akshaythammana/Ai_Calendar/token.json", "w") as token:
-      token.write(creds.to_json())
+    creds = None
+    token_path = "/Users/akshaythammana/Ai_Calendar/token.json"
+    creds_path = "/Users/akshaythammana/Ai_Calendar/creds.json"
 
-  return creds
+    # Load existing credentials
+    if os.path.exists(token_path):
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+
+    # If credentials are not valid, refresh or regenerate
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                print(f"⚠️ Token refresh failed: {e}. Re-authenticating...")
+                creds = None  # force login
+        if not creds or not creds.valid:
+            flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
+            creds = flow.run_local_server(port=0)
+
+        # Save the new credentials
+        with open(token_path, "w") as token:
+            token.write(creds.to_json())
+
+    return creds
+
   
 def convert_ist_to_api_timestamp(date_string: str) -> str:
     """
@@ -72,9 +79,10 @@ def convert_ist_to_api_timestamp(date_string: str) -> str:
         print(f"Error converting timestamp: {e}")
         raise
 
+@tool
 def get_events(start_datetime_str: str = None, end_datetime_str: str = None):
     """
-    Retrieves all Google Calendar events between the specified start and end datetimes.
+    Retrieves all Google Calendar events between the specified start and end datetimes.Use this get event in the next day or week
 
     Args:
         start_datetime_str (str, optional): Start datetime in '%Y-%m-%d %H:%M:%S' (IST). Defaults to today.
@@ -113,7 +121,7 @@ def get_events(start_datetime_str: str = None, end_datetime_str: str = None):
 
     return events_result.get('items', [])
 
-
+@tool
 def create_event(
     summary: str,
     start_datetime_str: str,
@@ -133,7 +141,16 @@ def create_event(
         description (str, optional): Event description.
         location (str, optional): Event location.
         attendees (list, optional): List of attendee emails.
-        reminders (dict, optional): Reminder configuration.
+        reminders (dict, optional): Reminder configuration. 
+        Sample reminder format "reminders": {
+                "useDefault": false, // Set to true to use default calendar reminders, false to define custom overrides
+                "overrides": [
+                    {
+                    "method": "email", // Method of reminder: "email" or "popup"
+                    "minutes": 24 * 60 // Minutes before the event start time for the reminder to trigger
+                    }
+                ]
+                }
 
     Returns:
         dict: The created event resource.
@@ -182,11 +199,45 @@ def create_event(
     event = service.events().insert(calendarId=CALENDAR_ID, body=event_body).execute()
     return event
 
+@tool
+def create_multiple_events(events: List[dict]) -> List[dict]:
+    """
+    Creates multiple events in the calendar.
 
+    Each event must include: summary, start_datetime_str, end_datetime_str.
+    Optional: description, location, attendees, reminders.
+
+    Example input:
+    [
+        {
+            "summary": "[MEETING] Team Sync",
+            "start_datetime_str": "2025-08-05 10:00:00",
+            "end_datetime_str": "2025-08-05 11:00:00"
+        },
+        ...
+    ]
+    """
+    results = []
+    for event in events:
+        try:
+            result = create_event(
+                summary=event.get("summary"),
+                start_datetime_str=event.get("start_datetime_str"),
+                end_datetime_str=event.get("end_datetime_str"),
+                description=event.get("description", ""),
+                location=event.get("location", ""),
+                attendees=event.get("attendees"),
+                reminders=event.get("reminders")
+            )
+            results.append(result)
+        except Exception as e:
+            results.append({"error": str(e), "event": event})
+    return results
+
+@tool
 def get_event_by_name_and_timefarame(name: str, start_datetime_str: str, end_datetime_str: str, threshold: int = 65, top_k: int = 5) -> List[Dict]:
     """
-    Performs fuzzy search for events by name within a time window.
-
+    Gets event based on the partial title and time period. Name can be a part of the title not nessasry the whole title.
     Args:
         name (str): Search query for event summary.
         start_datetime_str (str): Start datetime in '%Y-%m-%d %H:%M:%S' (IST).
@@ -216,7 +267,7 @@ def get_event_by_name_and_timefarame(name: str, start_datetime_str: str, end_dat
 
 def edit_event_by_id(event_id, updated_fields):
     """
-    Updates an existing Google Calendar event by ID.
+    Edit any event by using its ID, send details updated in dict.Get the event id before using this
 
     Args:
         event_id (str): The event's unique identifier.
@@ -225,6 +276,19 @@ def edit_event_by_id(event_id, updated_fields):
     Returns:
         dict: The updated event resource, or None if update fails.
     """
+    #WIP convert input start and end time strings to the required format before running
+    if "start_datetime_str" in updated_fields:
+        updated_fields["start"] = {
+        "dateTime": convert_ist_to_api_timestamp(event["start_datetime_str"]).isoformat(),
+        "timeZone": "Asia/Kolkata"
+    }
+    
+    if "end_datetime_str" in updated_fields:
+        updated_fields["end"]={
+        "dateTime": convert_ist_to_api_timestamp(event["start_datetime_str"]).isoformat(),
+        "timeZone": "Asia/Kolkata"
+    }
+    
     creds = get_creds()
     service = build('calendar', 'v3', credentials=creds)
     # try:
@@ -243,6 +307,7 @@ def edit_event_by_id(event_id, updated_fields):
 
     return updated_event
 
+@tool
 def list_task_lists():
     """
     Lists all available Google Task lists for the authenticated user.
@@ -257,7 +322,8 @@ def list_task_lists():
     for tl in tasklists:
         print(f"{tl['title']} (ID: {tl['id']})")
 
-def list_tasks():
+@tool
+def get_tasks():
     """
     Lists all tasks in the default task list.
 
@@ -272,6 +338,7 @@ def list_tasks():
     for task in tasks:
         print(f"{task['title']} - Status: {task['status']} - ID:{tasks['id']}")
 
+@tool
 def create_task(title, notes=None, due=None):
     """
     Creates a new task in the default Google Task list.
@@ -294,12 +361,12 @@ def create_task(title, notes=None, due=None):
     }
     return service.tasks().insert(tasklist=TASKLIST_ID, body=task).execute()
 
-def edit_task_from_json(task_id, update_payload: dict):
+@tool
+def edit_task_by_id(task_id, update_payload: dict):
     """
     Updates a Google Task using a dictionary of fields.
 
     Args:
-        service: Google Tasks API service object.
         task_id (str): ID of the task to update.
         update_payload (dict): Fields to update (e.g., {'title': 'New Title'}).
 
@@ -324,8 +391,9 @@ def edit_task_from_json(task_id, update_payload: dict):
     except Exception as e:
         print("Error updating task:", e)
         return None
-    
-def fuzzy_search_tasks(name='', top_n=5,score_cutoff=50):
+
+@tool   
+def get_tasks_by_name(name='', top_n=5,score_cutoff=50):
     """
     Performs fuzzy search for tasks by title.
 
