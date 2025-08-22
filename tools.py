@@ -75,6 +75,12 @@ def convert_ist_to_api_timestamp(date_string: str) -> str:
         # Format the UTC time as an RFC 3339 string.
         # isoformat() handles the formatting, including the timezone offset.
         return utc_time
+    except ValueError:
+            # Raise or return error response
+            raise ValueError(
+                f"Invalid datetime format: {date_string}. "
+                "Give date in this format 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DDTHH:MM:SS'"
+            )
     except Exception as e:
         print(f"Error converting timestamp: {e}")
         raise
@@ -128,8 +134,85 @@ def create_event(
     end_datetime_str: str,
     description: str = "",
     location: str = "",
-    attendees: str = None,
-    reminders: str = None,
+    attendees: List[str] = None,
+    reminders: dict = None, 
+):
+    """
+    Creates a new event in the configured Google Calendar.
+
+    Args:
+        summary (str): Event title.
+        start_datetime_str (str): Start datetime in '%Y-%m-%d %H:%M:%S' (IST).
+        end_datetime_str (str): End datetime in '%Y-%m-%d %H:%M:%S' (IST).
+        description (str, optional): Event description.
+        location (str, optional): Event location.
+        attendees (list, optional): List of attendee emails.
+        reminders (dict, optional): Reminder configuration. 
+        Sample reminder format "reminders": {
+                "useDefault": false, // Set to true to use default calendar reminders, false to define custom overrides
+                "overrides": [
+                    {
+                    "method": "email", // Method of reminder: "email" or "popup"
+                    "minutes": 24 * 60 // Minutes before the event start time for the reminder to trigger
+                    }
+                ]
+                }
+
+    Returns:
+        dict: The created event resource.
+    """
+
+    # Step 1: Handle Credentials
+    creds = get_creds()
+    
+    # Handle default dates (now to 7 days later)
+    tz = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(tz)
+
+    if not start_datetime_str:
+        start_datetime= tz.localize(datetime(now.year, now.month, now.day))
+    else:
+        start_datetime = convert_ist_to_api_timestamp(start_datetime_str)
+    
+    if not end_datetime_str:
+        end_datetime = start_datetime + timedelta(days=7)
+    else:
+        end_datetime = convert_ist_to_api_timestamp(end_datetime_str)
+    
+    
+    # Step 2: Build the event data
+    service = build("calendar", "v3", credentials=creds)
+
+    event_body = {
+        "summary": summary,
+        "location": location,
+        "description": description,
+        "start": {
+            "dateTime": start_datetime.isoformat(),
+            "timeZone": "Asia/Kolkata",  # Adjust as needed
+        },
+        "end": {
+            "dateTime": end_datetime.isoformat(),
+            "timeZone": "Asia/Kolkata",
+        },
+        "reminders": reminders or {"useDefault": True},
+    }
+
+    if attendees:
+        event_body["attendees"] = [{"email": email} for email in attendees]
+
+    # Step 3: Create the event
+    event = service.events().insert(calendarId=CALENDAR_ID, body=event_body).execute()
+    return event
+
+def create_event_non_tool(
+    summary: str,
+    start_datetime_str: str,
+    end_datetime_str: str,
+    description: str = "",
+    location: str = "",
+    attendees: List[str] = None,
+    reminders: dict = None, 
 ):
     """
     Creates a new event in the configured Google Calendar.
@@ -220,7 +303,7 @@ def create_multiple_events(events: List[dict]) -> List[dict]:
     results = []
     for event in events:
         try:
-            result = create_event(
+            result = create_event_non_tool(
                 summary=event.get("summary"),
                 start_datetime_str=event.get("start_datetime_str"),
                 end_datetime_str=event.get("end_datetime_str"),

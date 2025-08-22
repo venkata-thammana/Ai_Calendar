@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 2000px;
+            height: 90vh;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        .chat-header {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-info h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .header-info p {
+            opacity: 0.8;
+            font-size: 14px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+        }
+
+        .status-dot.disconnected {
+            background: #ef4444;
+        }
+
+        /* Messages Area */
+        .messages-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8fafc;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 8px;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .bot-avatar {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+        }
+
+        .user-avatar {
+            background: linear-gradient(135deg, #06b6d4, #3b82f6);
+            color: white;
+        }
+
+        .system-avatar {
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            color: white;
+        }
+
+        .message-bubble {
+            padding: 10px 16px;        /* more horizontal space */
+            border-radius: 20px;       /* pill shape */
+            max-width: 80%;            /* don’t stretch across full width */
+            display: inline-block;     
+            line-height: 1.5;          
+            margin: 6px 0;             
+        }
+
+
+        .message.user .message-bubble {
+            background: #6c5ce7;             /* your purple */
+            color: white;
+            border-radius: 18px 18px 4px 18px;
+            margin-left: auto;               /* push to right */
+        }
+
+        .message.bot .message-bubble {
+            background: #f1f3f6;              /* light grey */
+            color: #333;
+            border-radius: 18px 18px 18px 4px;
+            margin-right: auto;               /* push to left */
+        }
+
+        .message.system .message-bubble {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message-time {
+            font-size: 11px;
+            opacity: 0.6;
+            margin-top: 8px;
+        }
+
+        .message.user .message-time {
+            color: rgba(255,255,255,0.7);
+        }
+
+        /* Typing Indicator */
+        .typing-indicator {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+            background: white;
+            padding: 16px 20px;
+            border-radius: 20px;
+            border-bottom-left-radius: 5px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #9ca3af;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        /* Input Area */
+        .input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 12px;
+            align-items: end;
+        }
+
+        .input-field {
+            flex: 1;
+            min-height: 50px;
+            max-height: 120px;
+            padding: 15px 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 25px;
+            font-size: 16px;
+            resize: none;
+            outline: none;
+            transition: border-color 0.2s;
+            font-family: inherit;
+        }
+
+        .input-field:focus {
+            border-color: #4f46e5;
+        }
+
+        .input-field:disabled {
+            background: #f9fafb;
+            cursor: not-allowed;
+        }
+
+        .send-button {
+            width: 50px;
+            height: 50px;
+            border: none;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.1s;
+        }
+
+        .send-button:hover:not(:disabled) {
+            transform: scale(1.05);
+        }
+
+        .send-button:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .chat-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .clear-chat {
+            background: none;
+            border: none;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .clear-chat:hover {
+            background: #f3f4f6;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* Scrollbar */
+        .messages-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages-container::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .chat-container {
+                width: 900px;        /* make it wide */
+                height: 500px;       /* keep it shorter */
+                max-width: 95%;      /* responsive on smaller screens */
+                margin: 40px auto;   /* center horizontally */
+                border-radius: 20px; /* keep rounded corners */
+                box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+                display: flex;
+                flex-direction: column;
+            }
+
+
+            .message-bubble {
+                flex: 1;
+                overflow-y: auto;
+                padding: 20px;
+            }
+
+            .chat-header {
+                padding: 15px;
+            }
+
+            .header-info h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="chat-container">
+        <!-- Header -->
+        <div class="chat-header">
+            <div class="header-info">
+                <h1>📅 Calendar Assistant</h1>
+                <p>AI-powered calendar management</p>
+            </div>
+            <div class="connection-status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="messages-container" id="messagesContainer">
+            <div class="message bot">
+                <div class="message-avatar bot-avatar">🤖</div>
+                <div class="message-content">
+                    <div class="message-bubble">
+                        Welcome! I'm CAL, your AI calendar assistant. I can help you manage events, tasks, and schedules. What would you like me to help you with today?
+                    </div>
+                    <div class="message-time" id="welcomeTime"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Typing Indicator -->
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="message-avatar bot-avatar">🤖</div>
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-container">
+            <div class="input-wrapper">
+                <textarea 
+                    id="messageInput" 
+                    class="input-field" 
+                    placeholder="Ask me about your calendar, events, or tasks..."
+                    rows="1"
+                ></textarea>
+                <button id="sendButton" class="send-button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22,2 15,22 11,13 2,9"></polygon>
+                    </svg>
+                </button>
+            </div>
+            <div class="chat-info">
+                <span>Session: <span id="sessionId"></span> • <span id="messageCount">1</span> messages</span>
+                <button class="clear-chat" onclick="clearChat()">🗑️ Clear Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let isConnected = false;
+        let messageCount = 1;
+        let sessionId = generateSessionId();
+
+        function generateSessionId() {
+            return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        }
+
+        
+        // DOM elements
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const sessionIdSpan = document.getElementById('sessionId');
+        const messageCountSpan = document.getElementById('messageCount');
+        const welcomeTime = document.getElementById('welcomeTime');
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            sessionIdSpan.textContent = sessionId.split('-')[1];
+            welcomeTime.textContent = formatTime(new Date());
+            testConnection();
+            
+            // Event listeners
+            messageInput.addEventListener('keypress', handleKeyPress);
+            sendButton.addEventListener('click', sendMessage);
+            messageInput.addEventListener('input', autoResize);
+        });
+
+        // Test server connection
+        async function testConnection() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/health');
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    setConnectionStatus(true);
+                } else {
+                    setConnectionStatus(false);
+                }
+            } catch (error) {
+                setConnectionStatus(false);
+                addSystemMessage('❌ Cannot connect to calendar assistant. Please make sure the Flask app is running on port 5000.');
+            }
+        }
+
+        // Set connection status
+        function setConnectionStatus(connected) {
+            isConnected = connected;
+            statusDot.className = `status-dot ${connected ? '' : 'disconnected'}`;
+            statusText.textContent = connected ? 'Connected' : 'Disconnected';
+            messageInput.disabled = !connected;
+            sendButton.disabled = !connected;
+        }
+
+        // Handle key press
+        function handleKeyPress(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // Auto-resize textarea
+        function autoResize() {
+            const textarea = messageInput;
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        }
+
+        // Send message
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || !isConnected) return;
+
+            // Add user message
+            addUserMessage(message);
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+            
+            // Show typing indicator
+            showTyping();
+
+            try {
+                const response = await fetch('http://127.0.0.1:5000/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        sessionId: sessionId
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                hideTyping();
+                addBotMessage(data.response || 'No response received');
+
+            } catch (error) {
+                hideTyping();
+                addSystemMessage(`Error: ${error.message}. Please check if the Flask server is running.`);
+            }
+        }
+
+        // Add user message
+        function addUserMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message user';
+            messageDiv.innerHTML = `
+                <div class="message-avatar user-avatar">👤</div>
+                <div class="message-content">
+                    <div class="message-bubble">${escapeHtml(text)}</div>
+                    <div class="message-time">${formatTime(new Date())}</div>
+                </div>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            updateMessageCount();
+            scrollToBottom();
+        }
+
+        // Add bot message (render markdown)
+        function addBotMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot';
+            messageDiv.innerHTML = `
+                <div class="message-avatar bot-avatar">🤖</div>
+                <div class="message-content">
+                    <div class="message-bubble">${marked.parse(text)}</div>
+                    <div class="message-time">${formatTime(new Date())}</div>
+                </div>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            updateMessageCount();
+            scrollToBottom();
+        }
+
+        // Add system message
+        function addSystemMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message system';
+            messageDiv.innerHTML = `
+                <div class="message-avatar system-avatar">⚙️</div>
+                <div class="message-content">
+                    <div class="message-bubble">${escapeHtml(text)}</div>
+                    <div class="message-time">${formatTime(new Date())}</div>
+                </div>
+            `;
+            messagesContainer.appendChild(messageDiv);
+            updateMessageCount();
+            scrollToBottom();
+        }
+
+        // Show typing indicator
+        function showTyping() {
+            typingIndicator.style.display = 'flex';
+            scrollToBottom();
+        }
+
+        // Hide typing indicator
+        function hideTyping() {
+            typingIndicator.style.display = 'none';
+        }
+
+        // Clear chat
+        function clearChat() {
+            // 1. Generate a new sessionId
+            sessionId = generateSessionId();
+            sessionIdSpan.textContent = sessionId.split('-')[1];
+
+            // 2. Reset chat window
+            messagesContainer.innerHTML = `
+                <div class="message bot">
+                    <div class="message-avatar bot-avatar">🤖</div>
+                    <div class="message-content">
+                        <div class="message-bubble">
+                            ✅ New chat started! How can I help you today?
+                        </div>
+                        <div class="message-time">${formatTime(new Date())}</div>
+                    </div>
+                </div>
+            `;
+
+            // 3. Reset message count
+            messageCount = 1;
+            updateMessageCount();
+        }
+
+
+        // Update message count
+        function updateMessageCount() {
+            messageCount++;
+            messageCountSpan.textContent = messageCount;
+        }
+
+        // Scroll to bottom
+        function scrollToBottom() {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Format time
+        function formatTime(date) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Escape HTML
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;")
+                .replace(/\n/g, "<br>");
+        }
+    </script>
+</body>
+</html>

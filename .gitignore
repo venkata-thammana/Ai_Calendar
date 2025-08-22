@@ -1,3 +1,5 @@
 # Ignore Google API credential files
 token.json
 creds.json
+.env
+.DS_Store

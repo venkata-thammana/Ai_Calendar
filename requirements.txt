@@ -3,3 +3,9 @@ google-auth-oauthlib
 google-api-python-client
 pytz
 rapidfuzz
+langgraph 
+langchain-tavily 
+langgraph-checkpoint-sqlite
+langchain_google_genai
+flask
+flask-cors
